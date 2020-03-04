@@ -12,104 +12,124 @@ import java.util.Map;
 @RestController
 @RequestMapping("/")
 public class CurrencyAverageCalculator {
-    private int count=0;
-    private String displayData = "";
-    private LocalDate localDate;
-    private Map<String, Double> map;
-    private String endDate = LocalDate.now().toString();
-    private String today = LocalDate.now().toString();
     private RestTemplate restTemplate = new RestTemplate();
     private String url = "https://api.exchangeratesapi.io/";
-    private String startDate = LocalDate.now().minusDays(15).toString();
 
     @GetMapping("/")
     public String Home() {
-        return getContentOf(startDate);
+        return getContentOf(LocalDate.now().toString());
+    }
+
+    @GetMapping("/{currencies}")
+    public String Home(@PathVariable(value = "currencies")String currencies){
+        return getContentOf(LocalDate.now().toString(),currencies);
     }
 
     @GetMapping("/{startDate}/{endDate}")
-    public String CalculateAverageBetween(@PathVariable(value = "startDate")String startDate,@PathVariable(value = "endDate")String endDate){
-        return CalculateAverage(startDate,endDate);
+    public String DisplayDataBetween(@PathVariable(value = "startDate")String startDate, @PathVariable(value = "endDate")String endDate){
+        return calculateTotal(startDate,endDate,"");
     }
 
-    private String CalculateAverage(String startDate,String endDate){
+    @GetMapping("/{startDate}/{endDate}/{currencies}")
+    public String DisplayDataBetween(@PathVariable(value = "startDate")String startDate, @PathVariable(value = "endDate")String endDate, @PathVariable(value = "currencies")String currencies){
+        return calculateTotal(startDate,endDate,currencies);
+    }
+
+    @GetMapping("avg/{startDate}/{endDate}")
+    public String DisplayAverageDataBetween(@PathVariable(value = "startDate")String startDate,@PathVariable(value = "endDate")String endDate){
+        return calculateAverageBetween(startDate,endDate,"");
+    }
+
+    @GetMapping("avg/{startDate}/{endDate}/{currencies}")
+    public String DisplayAverageDataBetween(@PathVariable(value = "startDate")String startDate, @PathVariable(value = "endDate")String endDate, @PathVariable(value = "currencies")String currencies){
+        return calculateAverageBetween(startDate,endDate,currencies);
+    }
+
+    private String calculateAverageBetween(String startDate,String endDate,String currencies){
         LocalDate start = LocalDate.parse(startDate);
         LocalDate end = LocalDate.parse(endDate).plusDays(1);
-
-        String display = "";
+        Map<String,Double>map = getConversionRatesOn(start).getRates().getMap();
+        start = start.plusDays(1);
+        int count = 1;
         for(LocalDate currdate=start;!currdate.isEqual(end);currdate=currdate.plusDays(1)){
-            display += getContentOf(currdate.toString());
+            ++count;
+            AddSecondMapIntoFirstMap(map,getConversionRatesOn(currdate).getRates().getMap());
         }
-
-        return display;
+        DivideEachEntry(map,count);
+        return getContentOfMap(map,currencies);
     }
-
-    private String DisplayDataBetween(String startDate,String endDate,String currencies){
-//        String currencyList[] = currencies.split("-");
-
-        LocalDate start = LocalDate.parse(startDate);
-        LocalDate end = LocalDate.parse(endDate).plusDays(1);
-
-        String display = "";
-        for(LocalDate currdate=start;!currdate.isEqual(end);currdate=currdate.plusDays(1)){
-            display += getContentOf(currdate.toString());
-        }
-        return display;
-    }
-
-    /*
-    * Add a map m to this class instance map.
-    * */
-    private void addMapto(Map<String,Double>m){
-        for(Map.Entry<String,Double> entry : m.entrySet()){
-            if(this.map.containsKey(entry.getKey())){
-                // update value
-                this.map.replace(entry.getKey(),entry.getValue(),entry.getValue()+this.map.get(entry.getKey()));
+    
+    private void AddSecondMapIntoFirstMap(Map<String,Double>first,Map<String,Double>second){
+        for(Map.Entry<String,Double>entry : second.entrySet()){
+            if(first.containsKey(entry.getKey())){
+                first.replace(entry.getKey(),first.get(entry.getKey())+entry.getValue());
             }else{
-                this.map.put(entry.getKey(),entry.getValue());
+                first.put(entry.getKey(),entry.getValue());
             }
         }
     }
 
-//    public void divide(int d){
-//        for(Map.Entry<String,Double>entry : this.map.entrySet()){
-//            Double val = entry.getValue();
-//            val /= (Double)(d*1.00);
-//            map.replace(entry.getKey(),val);
-//        }
-//    }
+    private void DivideEachEntry(Map<String,Double>map,int divider){
+        for(Map.Entry<String,Double>entry : map.entrySet()){
+            map.replace(entry.getKey(),(entry.getValue()/(divider*1.00)));
+        }
+    }
 
+    private String calculateTotal(String startDate, String endDate, String currencies){
+        LocalDate start = LocalDate.parse(startDate);
+        LocalDate end = LocalDate.parse(endDate).plusDays(1);
+        String display = "";
+        for(LocalDate currdate=start;!currdate.isEqual(end);currdate=currdate.plusDays(1)){
+            display += getContentOf(currdate.toString(),currencies);
+        }
+        return display;
+    }
+
+    private String getContentOf(String date){
+        return this.getContentOf(date,"");
+    }
+
+    private String getContentOf(String date,String currencies){
+        CurrentDateData currentDateData = getConversionRatesOn(date);
+        String displayData = "";
+        displayData += "Base : "+ currentDateData.getBase() + " <br>";
+        displayData += "Base date : "+currentDateData.getBaseDate() + " <br>";
+        displayData += "Date: " + date + "<br><br>";
+        displayData += getContentOfMap(currentDateData.getRates().getMap(),currencies);
+        displayData += "<br><br><hr><br><br>";
+        return displayData;
+    }
+
+    private String getContentOfMap(Map<String,Double>map,String currencies){
+        String content = "";
+        if(currencies.length()>0){
+            String currencyList[] = currencies.split("-");
+            for(String currency : currencyList){
+                if(map.containsKey(currency)){
+                    content += currency + " -> " + map.get(currency) + "<br>";
+                }
+            }
+        }else{
+            for(Map.Entry<String,Double>entry : map.entrySet()){
+                content += entry.getKey() + " -> " + entry.getValue() + " <br>";
+            }
+        }
+        return content;
+    }
+
+    /*
+    * Returns Currency rate of a given date.
+    * */
     private CurrentDateData getConversionRatesOn(String date) {
         CurrentDateData currentDateData = restTemplate.getForObject(url+date, CurrentDateData.class);
         return currentDateData;
     }
 
-    private String getContentOf(String date){
-        CurrentDateData currentDateData = getConversionRatesOn(date);
-        String displayData = "";
-        displayData += "Base : "+currentDateData.getBase() + " <br>";
-        displayData += "Base date : "+currentDateData.getBaseDate() + " <br>";
-        displayData += "Date: " + date + "<br><br>";
-        this.map = currentDateData.getRates().getMap();
-        displayData+=getMapContent();
-        displayData+= "<br><br><hr><br><br>";
-        return displayData;
+    private CurrentDateData getConversionRatesOn(LocalDate date){
+        return getConversionRatesOn(date.toString());
     }
 
-    private String getMapContent(){
-        String content = "";
-        for(Map.Entry<String,Double>entry : this.map.entrySet()){
-            content += entry.getKey() + " -> " + entry.getValue() + " <br>";
-        }
-        return content;
+    private Map<String,Double>getMapfromCurrentDateData(CurrentDateData currentDateData){
+        return currentDateData.getRates().getMap();
     }
-
-    private String getMapContent(Map<String,Double>myMap){
-        String content = "";
-        for(Map.Entry<String,Double>entry : myMap.entrySet()){
-            content += entry.getKey() + " -> " + entry.getValue() + " <br>";
-        }
-        return content;
-    }
-
 }
