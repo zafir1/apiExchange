@@ -1,6 +1,6 @@
 package com.khabri.crudapp.consumeapi;
 
-public class Exchange {
+public class CurrentDateData {
     private String base;
     private String date;
     private Rates rates;
@@ -13,7 +13,7 @@ public class Exchange {
         this.base = base;
     }
 
-    public String getDate() {
+    public String getBaseDate() {
         return date;
     }
 
